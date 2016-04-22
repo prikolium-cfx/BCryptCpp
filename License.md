@@ -1,4 +1,5 @@
 Copyright (c) 2006 Damien Miller <djm@mindrot.org> (jBCrypt)
+
 Copyright (c) 2016 Ery E. Wahyutama (C++ port)
 
 Permission to use, copy, modify, and distribute this software for any
