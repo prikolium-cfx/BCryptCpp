@@ -1,6 +1,7 @@
 #ifndef __BCRYPT_CPP_H__
 #define __BCRYPT_CPP_H__
 #include <string>
+#include <sstream>
 #include <vector>
 
 #define ArraySize(Array) sizeof(Array) / sizeof(Array[0])

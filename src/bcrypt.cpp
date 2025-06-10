@@ -1,5 +1,8 @@
-#include "BCrypt.h"
+#include "bcrypt.h"
+#include <chrono>
+#include <random>
 #include <sstream>
+
 using namespace BCryptCpp;
 
 // Initial contents of key schedule
@@ -191,8 +194,7 @@ std::vector<byte> BCrypt::DecodeBase64(const std::string& encodedstring, int max
     {
         throw std::invalid_argument("DecodeBase64: Invalid maximum bytes value!");
     }
-
-    int position = 0, sourceLength = encodedstring.size(), outputLength = 0;
+    int position = 0, sourceLength = static_cast<int>(encodedstring.size()), outputLength = 0;
 
     std::vector<byte> ret;
     while ((position < sourceLength - 1) && (outputLength < maximumBytes))
@@ -347,17 +349,18 @@ std::vector<byte> BCrypt::GetBytes(const std::wstring& input)
     {
         wchar_t Byte = input[i];
         // some system have 4 bytes for wchar_t and the other have 2 bytes
-        if (sizeof(wchar_t) == 2)
+        if constexpr (sizeof(wchar_t) == 2)
         {
             result.push_back((Byte >> 8) & 0xFF);
             result.push_back(Byte & 0xFF);
         }
-        else if (sizeof(wchar_t) == 4)
+        else if constexpr (sizeof(wchar_t) == 4)
         {
-            result.push_back((Byte >> 24) & 0xFF);
-            result.push_back((Byte >> 16) & 0xFF);
-            result.push_back((Byte >> 8) & 0xFF);
-            result.push_back(Byte & 0xFF);
+            auto value = static_cast<uint32_t>(Byte);
+            result.push_back(static_cast<unsigned char>((value >> 24) & 0xFF));
+            result.push_back(static_cast<unsigned char>((value >> 16) & 0xFF));
+            result.push_back(static_cast<unsigned char>((value >> 8) & 0xFF));
+            result.push_back(static_cast<unsigned char>(value & 0xFF));
         }
     }
     return result;
@@ -371,7 +374,7 @@ std::vector<byte> BCrypt::CryptRaw(const std::vector<byte>& inputBytes, const st
     memcpy(cdata, m_BfCryptCiphertext, sizeof(m_BfCryptCiphertext));
     int clen = ArraySize(cdata);
 
-    if (logRounds < 4 || logRounds > 30)
+    if (logRounds < 4 || logRounds > 31)
     {
         throw std::invalid_argument("CryptRaw: Bad number of rounds!");
     }
@@ -504,7 +507,7 @@ std::string BCrypt::HashPassword(const std::vector<byte>& rawInput, const std::s
     char buffer[6] = {0};
     _snprintf(buffer, ArraySize(buffer), "$%02d$", logRounds);
     result.append(buffer);
-    result.append(EncodeBase64(saltBytes, saltBytes.size()));
+    result.append(EncodeBase64(saltBytes, static_cast<int>(saltBytes.size())));
     result.append(EncodeBase64(hashed, (ArraySize(m_BfCryptCiphertext) * 4) - 1));
     return result;
 }
@@ -517,108 +520,83 @@ public:
     virtual bool generate(std::vector<byte>& result, unsigned long len) = 0;
 };
 
-#ifdef WIN32
-#include <Windows.h>
-#include <wincrypt.h>
-
 class RandomSequence : public IRandomSequence
 {
-    HCRYPTPROV m_hProvider;
+private:
+    std::random_device m_rd;
+    std::mt19937 m_gen;
+    std::uniform_int_distribution<int> m_dist;
 
 public:
-    RandomSequence() : m_hProvider(NULL)
+    RandomSequence()
+        : m_gen(static_cast<unsigned int>(std::chrono::high_resolution_clock::now().time_since_epoch().count())),
+          m_dist(0, 255)
     {
-        if (FALSE == CryptAcquireContext(&m_hProvider, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT))
+        // Seed the generator with random device if available, otherwise use time
+        try
         {
-            // failed, should we try to create a default provider?
-            if (NTE_BAD_KEYSET == GetLastError())
-            {
-                if (FALSE == CryptAcquireContext(&m_hProvider, NULL, NULL, PROV_RSA_FULL, CRYPT_NEWKEYSET))
-                {
-                    // ensure the provider is NULL so we could use a backup plan
-                    m_hProvider = NULL;
-                }
-            }
+            m_gen.seed(m_rd());
+        }
+        catch (...)
+        {
+            // Fallback to time-based seeding if random_device fails
+            m_gen.seed(static_cast<unsigned int>(std::chrono::high_resolution_clock::now().time_since_epoch().count()));
         }
     }
 
-    ~RandomSequence()
-    {
-        if (NULL != m_hProvider)
-        {
-            CryptReleaseContext(m_hProvider, 0U);
-        }
-    }
+    ~RandomSequence() = default;
 
     bool generate(byte* buf, unsigned long len) override
     {
-        if (NULL != m_hProvider)
+        if (!buf || len == 0)
         {
-            return CryptGenRandom(m_hProvider, len, buf);
+            return false;
         }
-        return false;
+
+        try
+        {
+            for (unsigned long i = 0; i < len; ++i)
+            {
+                buf[i] = static_cast<byte>(m_dist(m_gen));
+            }
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
     }
+
     bool generate(std::vector<byte>& result, unsigned long len) override
     {
-        if (m_hProvider)
+        if (len == 0)
+        {
+            return false;
+        }
+
+        try
         {
             result.clear();
-            result.resize(len);
-            if (generate(&result[0], len))
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-};
-#else
-// Provided here using "/dev/urandom" for Linux OS
-#include <stdio.h>
+            result.reserve(len);
 
-class RandomSequence : public IRandomSequence
-{
-    FILE* m_Rand;
-
-public:
-    RandomSequence() { m_Rand = fopen("/dev/urandom", "r"); }
-    ~RandomSequence()
-    {
-        if (m_Rand)
-        {
-            fclose(m_Rand);
-        }
-    }
-    bool generate(byte* buf, unsigned long len) override
-    {
-        if (m_Rand)
-        {
-            if (fread(buf, 1, len, m_Rand) != len)
+            for (unsigned long i = 0; i < len; ++i)
             {
-                return false;
+                result.push_back(static_cast<byte>(m_dist(m_gen)));
             }
             return true;
         }
-        return false;
-    }
-    bool generate(std::vector<byte>& result, unsigned long len) override
-    {
-        result.clear();
-        result.resize(len);
-        if (generate(&result[0], len))
+        catch (...)
         {
-            return true;
+            return false;
         }
-        return false;
     }
 };
-#endif
 
 std::string BCrypt::GenerateSalt(int workFactor /*= GENSALT_DEFAULT_LOG2_ROUNDS*/)
 {
-    if (workFactor < 4 || workFactor > 30)
+    if (workFactor < 4 || workFactor > 31)
     {
-        throw std::invalid_argument("GenerateSalt: log_rounds must between 4 and 30!");
+        throw std::invalid_argument("GenerateSalt: log_rounds must between 4 and 31!");
     }
 
     RandomSequence rng;
@@ -629,7 +607,7 @@ std::string BCrypt::GenerateSalt(int workFactor /*= GENSALT_DEFAULT_LOG2_ROUNDS*
     char buffer[10] = {0};
     _snprintf(buffer, ArraySize(buffer), "$2a$%02d$", workFactor);
     rs.append(buffer);
-    rs.append(EncodeBase64(rnd, rnd.size()));
+    rs.append(EncodeBase64(rnd, static_cast<int>(rnd.size())));
     return rs;
 }
 
@@ -640,23 +618,20 @@ bool BCrypt::CheckPassword(const std::string& plaintext, const std::string& hash
     {
         try_password = BCrypt::HashPassword(plaintext, hashed);
     }
-    catch (std::exception& e)
+    catch (std::exception&)
     {
-#ifdef _WIN32
-        UNREFERENCED_PARAMETER(e);
-#endif
         return false;
     }
     if (hashed.length() != try_password.length())
     {
         return false;
     }
-    BOOL bretval = false;
-    for (UINT i = 0; i < try_password.length(); ++i)
+    int diff = 0;
+    for (uint32_t i = 0; i < try_password.length(); ++i)
     {
-        bretval |= hashed[i] ^ try_password[i];
+        diff |= hashed[i] ^ try_password[i];
     }
-    return bretval == false;
+    return diff == 0;
 }
 
 bool BCryptCpp::BCrypt::CheckPassword(const std::wstring& plaintext, const std::string& hashed)
@@ -666,21 +641,18 @@ bool BCryptCpp::BCrypt::CheckPassword(const std::wstring& plaintext, const std::
     {
         try_password = BCrypt::HashPassword(plaintext, hashed);
     }
-    catch (std::exception& e)
+    catch (std::exception&)
     {
-#ifdef _WIN32
-        UNREFERENCED_PARAMETER(e);
-#endif
         return false;
     }
     if (hashed.length() != try_password.length())
     {
         return false;
     }
-    BOOL bretval = false;
-    for (UINT i = 0; i < try_password.length(); ++i)
+    int diff = 0;
+    for (uint32_t i = 0; i < try_password.length(); ++i)
     {
-        bretval |= hashed[i] ^ try_password[i];
+        diff |= hashed[i] ^ try_password[i];
     }
-    return bretval == false;
+    return diff == 0;
 }
