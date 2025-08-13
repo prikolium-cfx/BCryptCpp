@@ -4,9 +4,9 @@
 
 struct TestEntry
 {
-    char* plain;
-    char* salt;
-    char* expected;
+    const char* plain;
+    const char* salt;
+    const char* expected;
 };
 
 TestEntry testHash[] =
