@@ -2,6 +2,7 @@
 #include <chrono>
 #include <random>
 #include <sstream>
+#include <cstring>
 
 using namespace BCryptCpp;
 
@@ -270,8 +271,8 @@ unsigned int BCrypt::StreamToWord(const std::vector<byte>& data, int& offset)
 
 void BCrypt::InitializeKey()
 {
-    memcpy(m_P, m_POrig, sizeof(m_POrig));
-    memcpy(m_S, m_SOrig, sizeof(m_SOrig));
+    std::memcpy(m_P, m_POrig, sizeof(m_POrig));
+    std::memcpy(m_S, m_SOrig, sizeof(m_SOrig));
 }
 
 void BCrypt::Key(const std::vector<byte>& keyBytes)
@@ -371,7 +372,7 @@ std::vector<byte> BCrypt::CryptRaw(const std::vector<byte>& inputBytes, const st
 {
     unsigned int cdata[ArraySize(m_BfCryptCiphertext)] = {0};
 
-    memcpy(cdata, m_BfCryptCiphertext, sizeof(m_BfCryptCiphertext));
+    std::memcpy(cdata, m_BfCryptCiphertext, sizeof(m_BfCryptCiphertext));
     int clen = ArraySize(cdata);
 
     if (logRounds < 4 || logRounds > 31)
@@ -505,7 +506,7 @@ std::string BCrypt::HashPassword(const std::vector<byte>& rawInput, const std::s
     }
 
     char buffer[6] = {0};
-    _snprintf(buffer, ArraySize(buffer), "$%02d$", logRounds);
+    snprintf(buffer, ArraySize(buffer), "$%02d$", logRounds);
     result.append(buffer);
     result.append(EncodeBase64(saltBytes, static_cast<int>(saltBytes.size())));
     result.append(EncodeBase64(hashed, (ArraySize(m_BfCryptCiphertext) * 4) - 1));
@@ -605,7 +606,7 @@ std::string BCrypt::GenerateSalt(int workFactor /*= GENSALT_DEFAULT_LOG2_ROUNDS*
 
     std::string rs;
     char buffer[10] = {0};
-    _snprintf(buffer, ArraySize(buffer), "$2a$%02d$", workFactor);
+    snprintf(buffer, ArraySize(buffer), "$2a$%02d$", workFactor);
     rs.append(buffer);
     rs.append(EncodeBase64(rnd, static_cast<int>(rnd.size())));
     return rs;

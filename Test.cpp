@@ -1,5 +1,6 @@
 #include "BCrypt.h"
 #include <iostream>
+#include <locale>
 
 struct TestEntry
 {
