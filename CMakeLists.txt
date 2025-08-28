@@ -20,13 +20,13 @@ set(BCRYPT_HEADERS
 
 add_library(bcrypt STATIC ${BCRYPT_SOURCES} ${BCRYPT_HEADERS})
 
-target_include_directories(BCrypt 
+target_include_directories(bcrypt 
     PUBLIC 
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include/bcrypt>
 )
 
-set_target_properties(BCrypt PROPERTIES
+set_target_properties(bcrypt PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION ${PROJECT_VERSION_MAJOR}
     PUBLIC_HEADER "${BCRYPT_HEADERS}"
@@ -38,10 +38,10 @@ if(BUILD_TESTS)
     enable_testing()
     
     add_executable(bcryptTests Test.cpp)
-    target_link_libraries(bcryptTests BCrypt)
+    target_link_libraries(bcryptTests bcrypt)
     target_include_directories(bcryptTests PRIVATE include)
     
-    add_test(NAME bcryptTests COMMAND BCryptTests)
+    add_test(NAME bcryptTests COMMAND bcryptTests)
 endif()
 
 include(GNUInstallDirs)
