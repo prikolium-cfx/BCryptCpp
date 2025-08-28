@@ -56,7 +56,7 @@ install(TARGETS bcrypt
 
 install(EXPORT bcryptTargets
     FILE bcryptTargets.cmake
-    NAMESPACE BCrypt::
+    NAMESPACE bcrypt::
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/bcrypt
 )
 
